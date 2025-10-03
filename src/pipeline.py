@@ -35,10 +35,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     golden_steps = [
-        "Place left and right earbuds into respective slots",
-        "Close the charging case completely",
-        "Connect charging cable; LED should light indicating charging",
-        "Final packaging: case sealed and earbuds secure"
+    "Step 1: Preparation – ensure case, left earbud, right earbud, and cable are present on workstation",
+    "Step 2: Open the charging case fully, verify slots empty",
+    "Step 3: Insert left earbud into left slot, align correctly",
+    "Step 4: Insert right earbud into right slot, align correctly",
+    "Step 5: Close the charging case fully, no gaps",
+    "Step 6: Plug in charging cable, verify LED indicator ON"
     ]
 
     run_pipeline(args.video, args.outdir, golden_steps, args.stride, use_api=args.use_api, api_key=None)
