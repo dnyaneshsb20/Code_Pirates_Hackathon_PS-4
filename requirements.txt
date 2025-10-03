@@ -1,0 +1,9 @@
+opencv-python>=4.7.0
+numpy
+streamlit
+Pillow
+requests
+# Optional if you want to use YOLOv8 or transformers later:
+# ultralytics
+# torch
+# transformers
