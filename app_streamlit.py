@@ -1,3 +1,5 @@
+#app_streamlit.py
+
 import streamlit as st
 import cv2
 import tempfile
@@ -83,11 +85,9 @@ if st.session_state.running:
         stframe.image(frame, channels="BGR", width="stretch")
 
         # Save temporary frame
-        temp_file = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-        cv2.imwrite(temp_file.name, frame)
+        # Run verification directly on raw frame (no temp file needed 🚀)
+        result = run_vllm_verification([frame], golden_steps, use_api=False, raw=True)
 
-        # Run verification (simulated for demo)
-        result = run_vllm_verification([temp_file.name], golden_steps, use_api=False)
 
         # --- Show current detections in sidebar ---
         detections = result.get("detections", [])
@@ -155,7 +155,7 @@ if st.session_state.running:
                     st.toast(f"❓ Step {step} unclear: {info.get('expected')}")
                 last_alert_time = now
 
-        time.sleep(2)  # process every 2 seconds
+        time.sleep(0.1)  # process every 2 seconds
 
     cap.release()
     st.warning("⏹ Verification stopped.")

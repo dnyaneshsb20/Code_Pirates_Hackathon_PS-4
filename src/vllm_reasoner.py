@@ -1,3 +1,4 @@
+# src/vllm_reasoner.py
 import os
 import json
 import random
@@ -5,23 +6,25 @@ from typing import List, Dict
 
 # --------------------------
 # SIMULATED VLLM (for demo)
-# --------------------------
-def simulated_vllm(image_paths: List[str], prompt: str, mode: str = "basic") -> Dict[str, str]:
+def simulated_vllm(image_inputs: List, prompt: str, mode: str = "basic") -> Dict[str, str]:
     responses = {}
-    for p in image_paths:
-        base = os.path.basename(p)
+    for i, p in enumerate(image_inputs):
+        if isinstance(p, str):
+            key = os.path.basename(p)
+        else:
+            key = f"frame_{i}"   # safe string key for ndarray input
+
         r = random.random()
         if r < 0.6:
-            if "close" in p.lower() or "after" in p.lower():
-                txt = "Case closed and LED appears on. Charging likely started."
-            else:
-                txt = "Both earbuds observed in correct slots; orientation looks fine."
+            txt = "Both earbuds observed in correct slots; orientation looks fine."
         elif r < 0.85:
             txt = "One earbud looks absent or misaligned in view."
         else:
             txt = "Uncertain due to blur/occlusion."
-        responses[p] = txt
+
+        responses[key] = txt
     return responses
+
 
 # --------------------------
 # Lazy VLLM loader (loads model only when use_api=True)
@@ -146,32 +149,22 @@ from src.object_detector import detect_objects   # new file we’ll create
 # --------------------------
 # Convenience wrapper
 # --------------------------
-def run_vllm_verification(image_paths: List[str], golden_steps: List[str], use_api: bool = False, api_key: str = None) -> Dict:
+
+def run_vllm_verification(frames, golden_steps, use_api: bool = False, api_key: str = None, raw: bool = False):
     """
-    For each image path:
-      - run object detector (detect_objects returns list of dicts: {"object":..., "confidence":...})
-      - compose a short object summary for the VLLM prompt
-      - call either real VLLM or simulated VLLM
-      - collect results and produce verification
-    Returns a dict with keys: answers (mapping image->model-text-or-json), verification, detections (last frame)
+    frames: list of either file paths OR raw frames (numpy arrays)
     """
     results = {}
-    all_detections_for_return = []  # keep last-frame detections to return (Streamlit expects this)
+    all_detections_for_return = []
 
-    for p in image_paths:
-        # 1) object detection
-        detected_objs = detect_objects(p)  # list of dicts {"object","confidence"}
+    for i, p in enumerate(frames):
+        detected_objs = detect_objects(p)
         print("🔍 Detected objects:", detected_objs)
         all_detections_for_return = detected_objs
 
-        # normalize names for logic
-        detected_names = [d["object"] for d in detected_objs]
+        key = f"frame_{i}" if not isinstance(p, str) else os.path.basename(p)
 
-        # step1 logic: require case + cable + at least one earbud (practical demo rule)
-        step1_ok = ("case" in detected_names and "cable" in detected_names and
-                    ("left_earbud" in detected_names or "right_earbud" in detected_names))
-
-        # build object summary string for VLLM prompt
+        # Build object summary string
         if detected_objs:
             object_summary = ", ".join(f"{d['object']} (conf {d['confidence']:.2f})" for d in detected_objs)
         else:
@@ -208,19 +201,19 @@ For this frame:
             answers = simulated_vllm([p], prompt)
 
         # store the raw answer (simulated returns text; real VLLM may return JSON-like text)
-        results[p] = answers[p]
+        results[key] = list(answers.values())[0] 
 
         # 3) override step1 result based on detector if applicable
-        if step1_ok:
-            # override the frame's result to a JSON string the verifier can parse
-            results[p] = json.dumps({
-                "detected_step": 1,
-                "status": "done",
-                "note": "Case + cable + at least one earbud observed"
-            })
+        # if step1_ok:
+        #     # override the frame's result to a JSON string the verifier can parse
+        #     results[p] = json.dumps({
+        #         "detected_step": 1,
+        #         "status": "done",
+        #         "note": "Case + cable + at least one earbud observed"
+        #     })
 
     # 4) produce verification (parses the model outputs)
     verification = verify_steps_with_vllm(results, golden_steps)
 
-    # Return answers mapping, verification structure, and last-detected-objects list
     return {"answers": results, "verification": verification, "detections": all_detections_for_return}
+
