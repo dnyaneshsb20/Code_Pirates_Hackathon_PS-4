@@ -10,9 +10,9 @@ def run_pipeline(video_path: str, out_dir: str, golden_steps: list,
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "verification_result.json")
 
-    # --- If JSON already exists, just load it ---
+    # --- If cached result exists → load and return ---
     if os.path.exists(out_path):
-        print(f"📂 Using cached verification result from {out_path}")
+       
         with open(out_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
@@ -79,6 +79,26 @@ def run_pipeline(video_path: str, out_dir: str, golden_steps: list,
     print(f"✅ Saved verification result to {out_path}")
     return out_json
 
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--video", required=True)
+    parser.add_argument("--outdir", default="out_frames")
+    parser.add_argument("--stride", type=int, default=8)
+    parser.add_argument("--use_api", action="store_true")
+    args = parser.parse_args()
+
+    golden_steps = [
+        "Step 1: Preparation – ensure case, left earbud, right earbud, and cable are present on workstation",
+        "Step 2: Open the charging case fully, verify slots empty",
+        "Step 3: Insert left earbud into left slot, align correctly",
+        "Step 4: Insert right earbud into right slot, align correctly",
+        "Step 5: Close the charging case fully, no gaps",
+        "Step 6: Plug in charging cable, verify LED indicator ON"
+    ]
+
+    run_pipeline(args.video, args.outdir, golden_steps, args.stride, use_api=args.use_api, api_key=None)
 
 if __name__ == "__main__":
     import argparse
