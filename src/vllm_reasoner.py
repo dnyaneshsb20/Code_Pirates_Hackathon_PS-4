@@ -6,24 +6,30 @@ from typing import List, Dict
 
 # --------------------------
 # SIMULATED VLLM (for demo)
-def simulated_vllm(image_inputs: List, prompt: str, mode: str = "basic") -> Dict[str, str]:
+def simulated_vllm(image_inputs, prompt, mode="basic"):
     responses = {}
     for i, p in enumerate(image_inputs):
-        if isinstance(p, str):
-            key = os.path.basename(p)
-        else:
-            key = f"frame_{i}"   # safe string key for ndarray input
+        key = os.path.basename(p) if isinstance(p, str) else f"frame_{i}"
 
         r = random.random()
-        if r < 0.6:
-            txt = "Both earbuds observed in correct slots; orientation looks fine."
-        elif r < 0.85:
-            txt = "One earbud looks absent or misaligned in view."
+        if r < 0.2:
+            txt = "Case, cable and both earbuds present on workstation."
+        elif r < 0.35:
+            txt = "Case opened fully."
+        elif r < 0.5:
+            txt = "Left earbud inserted in left slot."
+        elif r < 0.65:
+            txt = "Right earbud inserted in right slot."
+        elif r < 0.8:
+            txt = "Case closed completely."
+        elif r < 0.95:
+            txt = "Cable connected and LED on."
         else:
             txt = "Uncertain due to blur/occlusion."
 
         responses[key] = txt
     return responses
+
 
 
 # --------------------------
@@ -88,60 +94,172 @@ def vllm_query_api_template(image_paths: List[str], prompt: str, api_key: str = 
 # --------------------------
 # Verification function
 # --------------------------
-def verify_steps_with_vllm(image_answers: Dict[str, str], golden_steps: List[str]) -> Dict[str, Dict]:
-    out = {}
-    for i, step in enumerate(golden_steps, start=1):
-        out[str(i)] = {"expected": step, "status": "uncertain", "evidence_frame": None, "note": None}
+# def verify_steps_with_vllm(image_answers: Dict[str, str], golden_steps: List[str]) -> Dict[str, Dict]:
+#     out = {}
+#     for i, step in enumerate(golden_steps, start=1):
+#         out[str(i)] = {"expected": step, "status": "uncertain", "evidence_frame": None, "note": None}
+
+#     for frame, text in image_answers.items():
+#         low = text.lower()
+
+#         # ---------------- Step-specific keyword rules ----------------
+#         if "earbud" in low and "cable" in low and "case" in low:
+#             out["1"]["status"] = "done"
+#             out["1"]["evidence_frame"] = frame
+#             out["1"]["note"] = text
+
+#         elif "open" in low and "case" in low:
+#             out["2"]["status"] = "done"
+#             out["2"]["evidence_frame"] = frame
+#             out["2"]["note"] = text
+
+#         elif "left" in low and "earbud" in low:
+#             out["3"]["status"] = "done"
+#             out["3"]["evidence_frame"] = frame
+#             out["3"]["note"] = text
+
+#         elif "right" in low and "earbud" in low:
+#             out["4"]["status"] = "done"
+#             out["4"]["evidence_frame"] = frame
+#             out["4"]["note"] = text
+
+#         elif "closed" in low and "case" in low:
+#             out["5"]["status"] = "done"
+#             out["5"]["evidence_frame"] = frame
+#             out["5"]["note"] = text
+
+#         elif "cable" in low and ("connected" in low or "insert" in low or "plug" in low):
+#             out["6"]["status"] = "done"
+#             out["6"]["evidence_frame"] = frame
+#             out["6"]["note"] = text
+
+#         # ---------------- Otherwise keep original fallback ----------------
+#         else:
+#             if "missing" in low or "absent" in low:
+#                 for i, step in enumerate(golden_steps, start=1):
+#                     if any(tok in low for tok in step.lower().split()):
+#                         out[str(i)]["status"] = "missing"
+#                         out[str(i)]["evidence_frame"] = frame
+#                         out[str(i)]["note"] = text
+#             else:
+#                 for i, step in enumerate(golden_steps, start=1):
+#                     if out[str(i)]["note"] is None:
+#                         out[str(i)]["note"] = text
+
+#     return out
+
+# def verify_steps_with_vllm(image_answers, golden_steps, detections=None):
+#     out = {str(i): {"expected": step, "status": "missing",
+#                     "evidence_frame": None, "note": None}
+#            for i, step in enumerate(golden_steps, start=1)}
+
+#     seen = set()  # track accumulated objects across frames
+
+#     for frame, text in image_answers.items():
+#         det_objs = [] if detections is None else detections.get(frame, [])
+#         objs = [d["object"] for d in det_objs]
+
+#         # Step 1: Preparation (all objects must appear at least once across frames)
+#         seen.update(objs)
+#         if out["1"]["status"] == "missing" and all(x in seen for x in ["case", "cable", "left_earbud", "right_earbud"]):
+#             out["1"].update({
+#                 "status": "done",
+#                 "evidence_frame": frame,
+#                 "note": "Case, cable and both earbuds present on workstation."
+#             })
+
+#         # Step 2: Case open (if you keep text check or add explicit open detection later)
+#         if out["2"]["status"] == "missing" and "open" in text.lower() and "case" in text.lower():
+#             out["2"].update({
+#                 "status": "done",
+#                 "evidence_frame": frame,
+#                 "note": "Case opened fully."
+#             })
+
+#         # Step 3: Left earbud inserted
+#         if out["3"]["status"] == "missing" and "left_earbud" in objs:
+#             out["3"].update({
+#                 "status": "done",
+#                 "evidence_frame": frame,
+#                 "note": "Left earbud inserted in left slot."
+#             })
+
+#         # Step 4: Right earbud inserted
+#         if out["4"]["status"] == "missing" and "right_earbud" in objs:
+#             out["4"].update({
+#                 "status": "done",
+#                 "evidence_frame": frame,
+#                 "note": "Right earbud inserted in right slot."
+#             })
+
+#         # Step 5: Case closed (still needs a text/detector condition)
+#         if out["5"]["status"] == "missing" and "closed" in text.lower() and "case" in text.lower():
+#             out["5"].update({
+#                 "status": "done",
+#                 "evidence_frame": frame,
+#                 "note": "Case closed completely."
+#             })
+
+#         # Step 6: Cable connected
+#         if out["6"]["status"] == "missing" and "cable" in objs:
+#             out["6"].update({
+#                 "status": "done",
+#                 "evidence_frame": frame,
+#                 "note": "Cable connected and LED on."
+#             })
+
+#     return out
+def verify_steps_with_vllm(image_answers, golden_steps, detections=None):
+    out = {
+        str(i): {
+            "expected": step,
+            "status": "missing",
+            "evidence_frame": None,
+            "note": None
+        }
+        for i, step in enumerate(golden_steps, start=1)
+    }
+
+    # Track objects across frames for Step 1
+    seen_objects = set()
 
     for frame, text in image_answers.items():
-        low = text.lower()
+        det_objs = [] if detections is None else detections.get(frame, [])
+        objs = [d["object"] for d in det_objs]
 
-        # ---------------- Step-specific keyword rules ----------------
-        if "earbud" in low and "cable" in low and "case" in low:
-            out["1"]["status"] = "done"
-            out["1"]["evidence_frame"] = frame
-            out["1"]["note"] = text
+        # Update global object tracker
+        seen_objects.update(objs)
 
-        elif "open" in low and "case" in low:
-            out["2"]["status"] = "done"
-            out["2"]["evidence_frame"] = frame
-            out["2"]["note"] = text
+        # --- Step 2: Open case ---
+        if "case" in objs and "open" in text.lower():
+            if out["2"]["status"] == "missing":
+                out["2"].update({"status": "done", "evidence_frame": frame, "note": text})
 
-        elif "left" in low and "earbud" in low:
-            out["3"]["status"] = "done"
-            out["3"]["evidence_frame"] = frame
-            out["3"]["note"] = text
+        # --- Step 3: Left earbud ---
+        if "left_earbud" in objs:
+            if out["3"]["status"] == "missing":
+                out["3"].update({"status": "done", "evidence_frame": frame, "note": "Left earbud inserted"})
 
-        elif "right" in low and "earbud" in low:
-            out["4"]["status"] = "done"
-            out["4"]["evidence_frame"] = frame
-            out["4"]["note"] = text
+        # --- Step 4: Right earbud ---
+        if "right_earbud" in objs:
+            if out["4"]["status"] == "missing":
+                out["4"].update({"status": "done", "evidence_frame": frame, "note": "Right earbud inserted"})
 
-        elif "closed" in low and "case" in low:
-            out["5"]["status"] = "done"
-            out["5"]["evidence_frame"] = frame
-            out["5"]["note"] = text
+        # --- Step 5: Case closed ---
+        if "closed" in text.lower() and "case" in text.lower():
+            if out["5"]["status"] == "missing":
+                out["5"].update({"status": "done", "evidence_frame": frame, "note": text})
 
-        elif "cable" in low and ("connected" in low or "insert" in low or "plug" in low):
-            out["6"]["status"] = "done"
-            out["6"]["evidence_frame"] = frame
-            out["6"]["note"] = text
+        # --- Step 6: Cable ---
+        if "cable" in objs:
+            if out["6"]["status"] == "missing":
+                out["6"].update({"status": "done", "evidence_frame": frame, "note": "Cable plugged in"})
 
-        # ---------------- Otherwise keep original fallback ----------------
-        else:
-            if "missing" in low or "absent" in low:
-                for i, step in enumerate(golden_steps, start=1):
-                    if any(tok in low for tok in step.lower().split()):
-                        out[str(i)]["status"] = "missing"
-                        out[str(i)]["evidence_frame"] = frame
-                        out[str(i)]["note"] = text
-            else:
-                for i, step in enumerate(golden_steps, start=1):
-                    if out[str(i)]["note"] is None:
-                        out[str(i)]["note"] = text
+    # --- Step 1 (Preparation) – check across all frames ---
+    if {"case", "left_earbud", "right_earbud", "cable"}.issubset(seen_objects):
+        out["1"].update({"status": "done", "note": "Case, cable and both earbuds present"})
 
     return out
-
 
 
 from src.object_detector import detect_objects   # new file we’ll create
