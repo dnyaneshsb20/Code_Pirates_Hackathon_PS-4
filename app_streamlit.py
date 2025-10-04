@@ -33,7 +33,11 @@ if uploaded_video is not None:
     with open(video_path, "wb") as f:
         f.write(uploaded_video.read())
 
-    st.video(video_path)
+    col1, col2, col3 = st.columns([1, 2, 1])  # middle column is wider
+    with col2:
+        st.video(video_path)
+
+        st.write("🔍 Analysis and results will appear here")
 
     # Run pipeline on uploaded video
     with st.spinner("🔍 Analyzing video, please wait..."):

@@ -4,32 +4,37 @@ import cv2
 from src.frame_extractor import extract_frames
 from src.vllm_reasoner import run_vllm_verification
 
-def run_pipeline(video_path: str, out_dir: str, golden_steps: list, every_n_frames: int = 8, use_api: bool = False, api_key: str = None):
+
+def run_pipeline(video_path: str, out_dir: str, golden_steps: list,
+                 every_n_frames: int = 8, use_api: bool = False, api_key: str = None):
     os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "verification_result.json")
 
-    # Capture video for timestamps
-    cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    cap.release()
+    # --- If JSON already exists, just load it ---
+    if os.path.exists(out_path):
+        print(f"📂 Using cached verification result from {out_path}")
+        with open(out_path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
+    # --- Otherwise run the pipeline ---
     print("Extracting frames...")
-    frames = extract_frames(video_path, out_dir, every_n_frames)
+    frames, timestamps = extract_frames(video_path, out_dir, every_n_frames)
     print(f"Extracted {len(frames)} frames to {out_dir}")
 
-    print("Running VLLM verification (simulated by default)...")
+    print("Running VLLM verification...")
     result = run_vllm_verification(frames, golden_steps, use_api=use_api, api_key=api_key)
 
-    # Add timestamps + annotate detections
     verification = result["verification"]
+
+    # Add timestamps + annotate frames
     for step, info in verification.items():
         frame_file = info.get("evidence_frame")
-        if frame_file:
+        if frame_file and frame_file in frames:
             try:
-                frame_idx = int(os.path.splitext(os.path.basename(frame_file))[0].split("_")[1])
-                timestamp = round((frame_idx * every_n_frames) / fps, 2)
+                frame_idx = frames.index(frame_file)
+                timestamp = timestamps[frame_idx]
                 info["timestamp"] = f"{timestamp} sec"
 
-                # Annotate detection frame
                 img = cv2.imread(frame_file)
                 if img is not None:
                     cv2.putText(img, f"Step {step}: {info['status']}",
@@ -41,27 +46,7 @@ def run_pipeline(video_path: str, out_dir: str, golden_steps: list, every_n_fram
             except Exception as e:
                 print(f"⚠️ Could not annotate frame for step {step}: {e}")
 
-    # --- Compare with golden reference if available ---
-   # --- Compare with golden reference if available ---
-    # golden_path = "out_golden/verification_result.json"
-    # if os.path.exists(golden_path):
-    #     print("🔗 Comparing with golden reference...")
-    #     golden = json.load(open(golden_path, encoding="utf-8"))
-    #     compared = {}
-    #     for step, g_info in golden["verification"].items():
-    #         t_info = verification.get(step, {})
-    #         test_status = t_info.get("status", "missing")
-
-    #         compared[step] = {
-    #         "expected": g_info["expected"],   # always golden expected
-    #         "status": test_status,            # from test run
-    #         "note": t_info.get("note", None),
-    #         "timestamp": t_info.get("timestamp", None),
-    #         "annotated_frame": t_info.get("annotated_frame", None),
-    #         "golden_frame": g_info.get("evidence_frame")  # keep golden evidence for reference
-    #         }
-    #     verification = compared
-        # --- Compare with golden reference (golden already exists) ---
+    # --- Compare with golden reference ---
     golden_path = "out_golden/verification_result.json"
     if os.path.exists(golden_path):
         print("🔗 Comparing with golden reference...")
@@ -70,34 +55,26 @@ def run_pipeline(video_path: str, out_dir: str, golden_steps: list, every_n_fram
 
         compared = {}
         for step, g_info in golden["verification"].items():
-            # take test result for that step
             t_info = verification.get(step, {})
             compared[step] = {
-                "expected": g_info["expected"],         # always golden expected
-                "status": t_info.get("status", "missing"),  # test video status
+                "expected": g_info["expected"],
+                "status": t_info.get("status", "missing"),
                 "note": t_info.get("note"),
                 "timestamp": t_info.get("timestamp"),
                 "annotated_frame": t_info.get("annotated_frame"),
-                "golden_frame": g_info.get("evidence_frame")  # keep golden reference
+                "golden_frame": g_info.get("evidence_frame")
             }
-
         verification = compared
 
-
-
+    # --- Save result JSON ---
     out_json = {
         "video": video_path,
         "frames": frames,
         "verification": verification,
         "vllm_texts": result["answers"]
     }
-
-    out_path = os.path.join(out_dir, "verification_result.json")
-    if os.path.exists(out_path):
-        print(f"📂 Using existing verification result from {out_path}")
-        with open(out_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(out_json, f, indent=2)
 
     print(f"✅ Saved verification result to {out_path}")
     return out_json
